@@ -2,7 +2,7 @@
 use super::luaerr;
 use crate::termwindow::TermWindowNotif;
 use crate::TermWindow;
-use config::keyassignment::{ClipboardCopyDestination, KeyAssignment};
+use config::keyassignment::{ClipboardCopyDestination, ClipboardPasteSource, KeyAssignment};
 use luahelper::*;
 use mlua::{UserData, UserDataMethods, UserDataRef};
 use mux::pane::PaneId;
@@ -12,7 +12,7 @@ use mux_lua::MuxPane;
 use termwiz_funcs::lines_to_escapes;
 use wezterm_dynamic::{FromDynamic, ToDynamic};
 use wezterm_toast_notification::ToastNotification;
-use window::{Connection, ConnectionOps, DeadKeyStatus, WindowOps, WindowState};
+use window::{Clipboard, Connection, ConnectionOps, DeadKeyStatus, WindowOps, WindowState};
 
 #[derive(Clone)]
 pub struct GuiWin {
@@ -332,6 +332,24 @@ impl UserData for GuiWin {
                     })));
                 let result = rx.recv().await.map_err(mlua::Error::external)?;
 
+                Ok(result)
+            },
+        );
+
+        methods.add_async_method(
+            "get_clipboard",
+            |_, this, clipboard: Option<ClipboardPasteSource>| async move {
+                let clipboard = clipboard.unwrap_or_default();
+                let clipboard = match clipboard {
+                    ClipboardPasteSource::Clipboard => Clipboard::Clipboard,
+                    ClipboardPasteSource::PrimarySelection => Clipboard::PrimarySelection,
+                };
+                let result = this
+                    .window
+                    .get_clipboard(clipboard)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("{:#}", e))
+                    .map_err(luaerr)?;
                 Ok(result)
             },
         );

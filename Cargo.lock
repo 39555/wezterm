@@ -1495,6 +1495,7 @@ dependencies = [
  "share-data",
  "spawn-funcs",
  "ssh-funcs",
+ "system-funcs",
  "termwiz",
  "termwiz-funcs",
  "time-funcs",
@@ -5240,6 +5241,15 @@ dependencies = [
  "pkg-config",
  "toml 0.8.19",
  "version-compare",
+]
+
+[[package]]
+name = "system-funcs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "config",
+ "luahelper",
 ]
 
 [[package]]

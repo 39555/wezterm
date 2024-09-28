@@ -27,7 +27,7 @@ use crate::{
     WebGpuPowerPreference, CONFIG_DIRS, CONFIG_FILE_OVERRIDE, CONFIG_OVERRIDES, CONFIG_SKIP,
     HOME_DIR,
 };
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use luahelper::impl_lua_conversion_dynamic;
 use mlua::FromLua;
 use portable_pty::CommandBuilder;
@@ -230,6 +230,11 @@ pub struct Config {
     /// This is not used when working with remote domains.
     #[dynamic(default)]
     pub set_environment_variables: HashMap<String, String>,
+
+    /// Specify a map of environment variables that will be set for the whole parent wezterm environment
+    /// Useful if Wezterm is started from a Finder or Explorer without a shell
+    #[dynamic(default)]
+    pub environment_variables: HashMap<String, String>,
 
     /// Specifies the height of a new window, expressed in character cells.
     #[dynamic(default = "default_initial_rows", validate = "validate_row_or_col")]
@@ -1091,6 +1096,9 @@ impl Config {
                 })?;
                 cfg.check_consistency()?;
 
+                // Set environment variables
+                cfg.env_variables()?;
+
                 // Compute but discard the key bindings here so that we raise any
                 // problems earlier than we use them.
                 let _ = cfg.key_bindings();
@@ -1223,6 +1231,16 @@ impl Config {
 
     pub fn default_config() -> Self {
         Self::default().compute_extra_defaults(None)
+    }
+
+    pub fn env_variables(&self) -> anyhow::Result<()> {
+        // We use `std::panic::catch_unwind` because `std::env::set_var` panics internally instead of returning a proper Result
+        std::panic::catch_unwind(|| {
+            for (k, v) in &self.environment_variables {
+                std::env::set_var(k, v)
+            }
+        })
+        .map_err(|e| anyhow!("Error {:?}", e.downcast_ref::<&str>().unwrap().to_owned()))
     }
 
     pub fn key_bindings(&self) -> KeyTables {

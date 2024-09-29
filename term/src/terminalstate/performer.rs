@@ -3,6 +3,7 @@ use crate::terminalstate::{
     default_color_map, CharSet, MouseEncoding, TabStop, UnicodeVersionStackEntry,
 };
 use crate::{ClipboardSelection, Position, TerminalState, VisibleRowIndex, DCS, ST};
+use base64::Engine;
 use finl_unicode::grapheme_clusters::Graphemes;
 use log::{debug, error};
 use num_traits::FromPrimitive;
@@ -765,7 +766,25 @@ impl<'a> Performer<'a> {
                 let selection = selection_to_selection(selection);
                 self.set_clipboard_contents(selection, None).ok();
             }
-            OperatingSystemCommand::QuerySelection(_) => {}
+            OperatingSystemCommand::QuerySelection(selection) => {
+                if let Some(clip) = self.clipboard.as_ref() {
+                    let selection = selection_to_selection(selection);
+                    match clip.get_contents(selection) {
+                        Ok(content) => {
+                            write!(
+                                self.writer,
+                                "{}",
+                                base64::engine::general_purpose::STANDARD.encode(content)
+                            )
+                            .ok();
+                            self.writer.flush().ok();
+                        }
+                        Err(err) => {
+                            error!("failed to get clipboard in response to OSC 52: {:#?}", err)
+                        }
+                    }
+                }
+            }
             OperatingSystemCommand::SetSelection(selection, selection_data) => {
                 let selection = selection_to_selection(selection);
                 match self.set_clipboard_contents(selection, Some(selection_data)) {

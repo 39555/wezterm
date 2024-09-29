@@ -200,6 +200,33 @@ impl GuiFrontEnd {
                     })
                     .detach();
                 }
+                MuxNotification::QueryClipboard {
+                    pane_id,
+                    selection,
+                    tx,
+                } => {
+                    promise::spawn::spawn_into_main_thread(async move {
+                        let fe = crate::frontend::front_end();
+                        log::trace!("get clipboard in pane {} {:?}", pane_id, selection);
+                        if let Some(window) = fe.known_windows.borrow().keys().next() {
+                            let clipboard = match selection {
+                                ClipboardSelection::Clipboard => Clipboard::Clipboard,
+                                ClipboardSelection::PrimarySelection => Clipboard::PrimarySelection,
+                            };
+                            let future = window.get_clipboard(clipboard);
+                            // NOTE: We use `block_on` because otherwise the channel just stucks in
+                            // the deadlock randomly
+                            promise::spawn::block_on(async move {
+                                let _ = tx.send(future.await).await;
+                            });
+                        } else {
+                            let _ = tx.send(Err(anyhow::anyhow!(
+                                "Cannot get clipboard as there are no windows"
+                            )));
+                        };
+                    })
+                    .detach();
+                }
             }
             true
         });

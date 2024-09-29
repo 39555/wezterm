@@ -71,6 +71,11 @@ pub enum MuxNotification {
         selection: ClipboardSelection,
         clipboard: Option<String>,
     },
+    QueryClipboard {
+        pane_id: PaneId,
+        selection: ClipboardSelection,
+        tx: smol::channel::Sender<anyhow::Result<String>>,
+    },
     SaveToDownloads {
         name: Option<String>,
         data: Arc<Vec<u8>>,
@@ -1434,6 +1439,20 @@ impl Clipboard for MuxClipboard {
             clipboard,
         });
         Ok(())
+    }
+    fn get_contents(&self, selection: ClipboardSelection) -> anyhow::Result<String> {
+        let mux =
+            Mux::try_get().ok_or_else(|| anyhow::anyhow!("MuxClipboard::set_contents: no Mux?"))?;
+
+        let (tx, rx) = smol::channel::bounded(1);
+        mux.notify(MuxNotification::QueryClipboard {
+            pane_id: self.pane_id,
+            selection,
+            tx,
+        });
+
+        let result = rx.recv_blocking()?;
+        result
     }
 }
 

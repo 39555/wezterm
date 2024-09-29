@@ -14,6 +14,8 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, HashSet};
 use std::rc::Rc;
 use std::sync::Arc;
+use termwiz::escape::osc::Selection;
+use termwiz::escape::OperatingSystemCommand;
 use wezterm_term::{Alert, ClipboardSelection};
 use wezterm_toast_notification::*;
 
@@ -203,7 +205,7 @@ impl GuiFrontEnd {
                 MuxNotification::QueryClipboard {
                     pane_id,
                     selection,
-                    tx,
+                    mut writer,
                 } => {
                     promise::spawn::spawn_into_main_thread(async move {
                         let fe = crate::frontend::front_end();
@@ -214,15 +216,31 @@ impl GuiFrontEnd {
                                 ClipboardSelection::PrimarySelection => Clipboard::PrimarySelection,
                             };
                             let future = window.get_clipboard(clipboard);
-                            // NOTE: We use `block_on` because otherwise the channel just stucks in
-                            // the deadlock randomly
-                            promise::spawn::block_on(async move {
-                                let _ = tx.send(future.await).await;
-                            });
+                            promise::spawn::spawn(async move {
+                                let content = future.await;
+                                let clipboard = match selection {
+                                    ClipboardSelection::Clipboard => Selection::CLIPBOARD,
+                                    ClipboardSelection::PrimarySelection => Selection::PRIMARY,
+                                };
+                                match content {
+                                    Ok(content) => {
+                                    if let Err(err) = write!(
+                                        *writer,
+                                        "{}",
+                                        OperatingSystemCommand::SetSelection(clipboard, content)
+                                    ){
+                                        log::error!("Error writing clipboard content into the given writer {}", err);
+                                    }
+
+                                    }
+                                    Err(err) => {
+                                        log::error!("Error get clipboard content {}", err);
+                                    }
+                                }
+                            })
+                            .detach();
                         } else {
-                            let _ = tx.send(Err(anyhow::anyhow!(
-                                "Cannot get clipboard as there are no windows"
-                            )));
+                            log::error!("Cannot get clipboard as there are no windows");
                         };
                     })
                     .detach();

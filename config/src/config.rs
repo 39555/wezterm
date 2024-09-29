@@ -245,6 +245,11 @@ pub struct Config {
     #[dynamic(default)]
     pub enable_kitty_keyboard: bool,
 
+    /// Enable OSC 52 clipboard reading
+    /// This could be a risky feature to enable by default
+    #[dynamic(default)]
+    pub enable_osc52_clipboard_reading: bool,
+
     /// Whether the terminal should respond to requests to read the
     /// title string.
     /// Disabled by default for security concerns with shells that might

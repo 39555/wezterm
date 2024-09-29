@@ -357,6 +357,11 @@ pub struct TerminalState {
     term_version: String,
 
     writer: BufWriter<ThreadedWriter>,
+    // access to the underline sender
+    // because we want to pass that writer between threads with Clone + Send + Sync
+    // ans since mpsc::Sender is cheap to pass around and BufWriter is not, we keep both
+    // we need this to get clipboard content on osc52 request
+    writer_inner: ThreadedWriter,
 
     image_cache: lru::LruCache<[u8; 32], Arc<ImageData>>,
     sixel_scrolls_right: bool,
@@ -446,9 +451,12 @@ fn default_color_map() -> HashMap<u16, RgbColor> {
 /// back-pressure when there is a lot of data to read,
 /// and we're in control of the write side, which represents
 /// input from the interactive user, or pastes.
+#[derive(Debug, Clone)]
 struct ThreadedWriter {
     sender: Sender<WriterMessage>,
 }
+
+impl ClipboardTx for ThreadedWriter {}
 
 enum WriterMessage {
     Data(Vec<u8>),
@@ -507,7 +515,8 @@ impl TerminalState {
         term_version: &str,
         writer: Box<dyn std::io::Write + Send>,
     ) -> TerminalState {
-        let writer = BufWriter::new(ThreadedWriter::new(writer));
+        let writer_inner = ThreadedWriter::new(writer);
+        let writer = BufWriter::new(writer_inner.clone());
         let seqno = 1;
         let screen = ScreenOrAlt::new(size, &config, seqno, config.bidi_mode());
 
@@ -569,6 +578,7 @@ impl TerminalState {
             term_program: term_program.to_string(),
             term_version: term_version.to_string(),
             writer,
+            writer_inner,
             image_cache: lru::LruCache::new(NonZeroUsize::new(16).unwrap()),
             user_vars: HashMap::new(),
             kitty_img: Default::default(),

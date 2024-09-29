@@ -27,7 +27,7 @@ use std::time::{Duration, Instant};
 use termwiz::escape::csi::{DecPrivateMode, DecPrivateModeCode, Device, Mode};
 use termwiz::escape::{Action, CSI};
 use thiserror::*;
-use wezterm_term::{Clipboard, ClipboardSelection, DownloadHandler, TerminalSize};
+use wezterm_term::{Clipboard, ClipboardTx, ClipboardSelection, DownloadHandler, TerminalSize};
 #[cfg(windows)]
 use winapi::um::winsock2::{SOL_SOCKET, SO_RCVBUF, SO_SNDBUF};
 
@@ -50,6 +50,7 @@ pub mod window;
 use crate::activity::Activity;
 
 pub const DEFAULT_WORKSPACE: &str = "default";
+
 
 #[derive(Clone, Debug)]
 pub enum MuxNotification {
@@ -74,7 +75,7 @@ pub enum MuxNotification {
     QueryClipboard {
         pane_id: PaneId,
         selection: ClipboardSelection,
-        tx: smol::channel::Sender<anyhow::Result<String>>,
+        writer: Box<dyn ClipboardTx>
     },
     SaveToDownloads {
         name: Option<String>,
@@ -1440,19 +1441,16 @@ impl Clipboard for MuxClipboard {
         });
         Ok(())
     }
-    fn get_contents(&self, selection: ClipboardSelection) -> anyhow::Result<String> {
+    fn get_contents(&self, selection: ClipboardSelection, writer: Box<dyn ClipboardTx>) -> anyhow::Result<()> {
         let mux =
-            Mux::try_get().ok_or_else(|| anyhow::anyhow!("MuxClipboard::set_contents: no Mux?"))?;
+            Mux::try_get().ok_or_else(|| anyhow::anyhow!("MuxClipboard::get_contents: no Mux?"))?;
 
-        let (tx, rx) = smol::channel::bounded(1);
         mux.notify(MuxNotification::QueryClipboard {
             pane_id: self.pane_id,
             selection,
-            tx,
+            writer,
         });
-
-        let result = rx.recv_blocking()?;
-        result
+        Ok(())
     }
 }
 

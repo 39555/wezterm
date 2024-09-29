@@ -10,13 +10,37 @@ pub enum ClipboardSelection {
     PrimarySelection,
 }
 
+pub trait ClipboardTx: std::io::Write + Send + Sync + std::fmt::Debug + ClipboardTxClone {}
+pub trait ClipboardTxClone {
+    fn clone_box(&self) -> Box<dyn ClipboardTx + Send + Sync>;
+}
+
+impl<T> ClipboardTxClone for T
+where
+    T: 'static + ClipboardTx + Clone + Send + Sync,
+{
+    fn clone_box(&self) -> Box<dyn ClipboardTx + Send + Sync> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<dyn ClipboardTx> {
+    fn clone(&self) -> Self {
+        self.clone_box()
+    }
+}
+
 pub trait Clipboard: Send + Sync {
     fn set_contents(
         &self,
         selection: ClipboardSelection,
         data: Option<String>,
     ) -> anyhow::Result<()>;
-    fn get_contents(&self, selection: ClipboardSelection) -> anyhow::Result<String>;
+    fn get_contents(
+        &self,
+        selection: ClipboardSelection,
+        writer: Box<dyn ClipboardTx>,
+    ) -> anyhow::Result<()>;
 }
 
 impl Clipboard for Box<dyn Clipboard> {
@@ -27,8 +51,12 @@ impl Clipboard for Box<dyn Clipboard> {
     ) -> anyhow::Result<()> {
         self.as_ref().set_contents(selection, data)
     }
-    fn get_contents(&self, selection: ClipboardSelection) -> anyhow::Result<String> {
-        self.as_ref().get_contents(selection)
+    fn get_contents(
+        &self,
+        selection: ClipboardSelection,
+        writer: Box<dyn ClipboardTx>,
+    ) -> anyhow::Result<()> {
+        self.as_ref().get_contents(selection, writer)
     }
 }
 

@@ -36,6 +36,15 @@ impl Clipboard for LocalClip {
         *self.clip.lock().unwrap() = clip;
         Ok(())
     }
+    fn get_contents(
+        &self,
+        _selection: ClipboardSelection,
+        mut writer: Box<dyn ClipboardTx>,
+    ) -> anyhow::Result<()>{
+
+        write!(writer, "{:?}", &self.clip.lock().unwrap()).ok();
+        Ok(())
+    }
 }
 
 struct TestTerm {

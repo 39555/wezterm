@@ -775,6 +775,8 @@ impl<'a> Performer<'a> {
                             error!("failed to get clipboard in response to OSC 52: {:#?}", err)
                         }
                     }
+                } else {
+                    log::warn!("OSC52 clipboard reading is disabled")
                 }
             }
             OperatingSystemCommand::SetSelection(selection, selection_data) => {
